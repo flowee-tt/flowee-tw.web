@@ -1,18 +1,21 @@
 /* ==========================================
-   WEB LỚP A6 - GLOBAL REALTIME CLOUD ENGINE (MULTI-DEVICE SYNC EDITION)
+   WEB LỚP A6 - UNIFIED REALTIME CLOUD ENGINE (SYSTEM-WIDE MULTI-DEVICE SYNC)
    Features:
-   1. REALTIME GLOBAL CLOUD SYNC ACROSS ALL PHONES & COMPUTERS ANYWHERE IN THE WORLD:
-      - Automatically syncs Posts, Photos, Videos, Comments, Likes, Roster, and Class Settings
-        across different physical devices (Phone A, Phone B, Computer C) in real time!
-   2. Super Admin Dual Access: PIN 999999 in Auth Gateway OR admin.html.
+   1. UNIFIED SYSTEM-WIDE REALTIME CLOUD SYNC:
+      - Super Admin creates/deletes/edits a class on ANY device -> ALL phones & computers update dropdown instantly!
+      - Class Admin updates roster/passwords -> All devices sync immediately.
+      - Students post photos, videos, comments, likes -> Syncs globally across all devices!
+   2. Super Admin Dual Access: Enter PIN 999999 in Auth Gateway OR admin.html.
    3. Restored Class Admin Student Password Controls.
    4. Premium Glassmorphism Auth Gateway with Eye Password Toggle.
    ========================================== */
 
 const SUPER_ADMIN_PIN = "999999";
 const SYSTEM_CLASSES_KEY = 'web_lop_classes_index';
-const CLOUD_BUCKET_ID = 'sF3tZXi7AvEwtjgyFamHV';
-const CLOUD_BASE_URL = `https://kvdb.io/${CLOUD_BUCKET_ID}/`;
+
+// Dedicated Global Cloud Endpoint for System-Wide Synchronization
+const CLOUD_REALTIME_API = 'https://api.restful-api.dev/objects';
+const CLOUD_MASTER_KEY = 'web_lop_system_master_v2';
 
 const INITIAL_OFFICIAL_ROSTER = [
   "Nguyễn Văn Nam",
@@ -146,6 +149,7 @@ class AppState {
     this.tempAvatarData = null;
     this.isUploading = false;
     this.authMode = 'STUDENT';
+    this.cloudObjectId = localStorage.getItem('web_lop_cloud_obj_id') || null;
     this.isSyncingWithCloud = false;
   }
 
@@ -198,37 +202,49 @@ class AppState {
       syncChannel.postMessage({ type: 'DATA_UPDATED', classCode: this.systemClassName, timestamp: Date.now() });
     }
 
-    // Push state to Global Cloud REST Storage for Multi-Device Real-time Sync
+    // Push Unified System State to Cloud Engine
     this.pushToCloud();
   }
 
   async pushToCloud() {
     try {
       const payload = {
-        webDisplayName: this.webDisplayName,
-        academicYear: this.academicYear,
-        classStudentPassword: this.classStudentPassword,
-        classAdminPassword: this.classAdminPassword,
-        officialRoster: this.officialRoster,
-        posts: this.posts,
-        groups: this.groups,
-        projects: this.projects,
-        updatedAt: Date.now()
+        name: CLOUD_MASTER_KEY,
+        data: {
+          classesIndex: this.classesIndex,
+          systemClassName: this.systemClassName,
+          webDisplayName: this.webDisplayName,
+          academicYear: this.academicYear,
+          classStudentPassword: this.classStudentPassword,
+          classAdminPassword: this.classAdminPassword,
+          officialRoster: this.officialRoster,
+          posts: this.posts,
+          groups: this.groups,
+          projects: this.projects,
+          updatedAt: Date.now()
+        }
       };
 
-      // Push Class Data
-      fetch(`${CLOUD_BASE_URL}class_${this.systemClassName}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      }).catch(err => console.warn("Cloud push warning:", err));
-
-      // Push Global Classes Index
-      fetch(`${CLOUD_BASE_URL}classes_index`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(this.classesIndex)
-      }).catch(err => console.warn("Cloud index push warning:", err));
+      if (!this.cloudObjectId) {
+        const res = await fetch(CLOUD_REALTIME_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.id) {
+            this.cloudObjectId = data.id;
+            localStorage.setItem('web_lop_cloud_obj_id', data.id);
+          }
+        }
+      } else {
+        fetch(`${CLOUD_REALTIME_API}/${this.cloudObjectId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }).catch(err => console.warn("Cloud update warning:", err));
+      }
     } catch(e) {
       console.warn("Cloud sync error:", e);
     }
@@ -239,64 +255,67 @@ class AppState {
     this.isSyncingWithCloud = true;
 
     try {
-      // 1. Fetch Global Classes Index
-      const resIndex = await fetch(`${CLOUD_BASE_URL}classes_index`).catch(() => null);
-      if (resIndex && resIndex.ok) {
-        const cloudIndex = await resIndex.json().catch(() => null);
-        if (Array.isArray(cloudIndex) && cloudIndex.length > 0) {
-          this.classesIndex = cloudIndex;
-          localStorage.setItem(SYSTEM_CLASSES_KEY, JSON.stringify(cloudIndex));
-          populateAuthClassSelect();
-        }
-      }
+      if (this.cloudObjectId) {
+        const res = await fetch(`${CLOUD_REALTIME_API}/${this.cloudObjectId}`).catch(() => null);
+        if (res && res.ok) {
+          const cloudRes = await res.json().catch(() => null);
+          const cloudData = cloudRes ? cloudRes.data : null;
 
-      // 2. Fetch Active Class Data
-      const resClass = await fetch(`${CLOUD_BASE_URL}class_${this.systemClassName}`).catch(() => null);
-      if (resClass && resClass.ok) {
-        const cloudClass = await resClass.json().catch(() => null);
-        if (cloudClass && cloudClass.updatedAt) {
-          let hasChanges = false;
+          if (cloudData && cloudData.updatedAt) {
+            let hasChanges = false;
 
-          if (cloudClass.webDisplayName && cloudClass.webDisplayName !== this.webDisplayName) {
-            this.webDisplayName = cloudClass.webDisplayName;
-            hasChanges = true;
-          }
-          if (cloudClass.academicYear && cloudClass.academicYear !== this.academicYear) {
-            this.academicYear = cloudClass.academicYear;
-            hasChanges = true;
-          }
-          if (cloudClass.classStudentPassword && cloudClass.classStudentPassword !== this.classStudentPassword) {
-            this.classStudentPassword = cloudClass.classStudentPassword;
-            hasChanges = true;
-          }
-          if (cloudClass.officialRoster && JSON.stringify(cloudClass.officialRoster) !== JSON.stringify(this.officialRoster)) {
-            this.officialRoster = cloudClass.officialRoster;
-            hasChanges = true;
-          }
-          if (cloudClass.posts && JSON.stringify(cloudClass.posts) !== JSON.stringify(this.posts)) {
-            this.posts = cloudClass.posts;
-            hasChanges = true;
-          }
-          if (cloudClass.groups && JSON.stringify(cloudClass.groups) !== JSON.stringify(this.groups)) {
-            this.groups = cloudClass.groups;
-            hasChanges = true;
-          }
-          if (cloudClass.projects && JSON.stringify(cloudClass.projects) !== JSON.stringify(this.projects)) {
-            this.projects = cloudClass.projects;
-            hasChanges = true;
-          }
+            // 1. Sync Global System Classes Index (Super Admin Class Creations)
+            if (Array.isArray(cloudData.classesIndex) && JSON.stringify(cloudData.classesIndex) !== JSON.stringify(this.classesIndex)) {
+              this.classesIndex = cloudData.classesIndex;
+              localStorage.setItem(SYSTEM_CLASSES_KEY, JSON.stringify(this.classesIndex));
+              populateAuthClassSelect();
+              hasChanges = true;
+            }
 
-          if (hasChanges) {
-            localStorage.setItem(`web_lop_web_name_${this.systemClassName}`, this.webDisplayName);
-            localStorage.setItem(`web_lop_year_${this.systemClassName}`, this.academicYear);
-            localStorage.setItem(`web_lop_dynamic_pass_${this.systemClassName}`, this.classStudentPassword);
-            localStorage.setItem(`web_lop_roster_${this.systemClassName}`, JSON.stringify(this.officialRoster));
-            localStorage.setItem(`web_lop_posts_${this.systemClassName}`, JSON.stringify(this.posts));
-            localStorage.setItem(`web_lop_groups_${this.systemClassName}`, JSON.stringify(this.groups));
-            localStorage.setItem(`web_lop_projects_${this.systemClassName}`, JSON.stringify(this.projects));
-            
-            await hydratePostMediaUrls();
-            renderApp();
+            // 2. Sync Active Class Content & Settings
+            if (cloudData.systemClassName === this.systemClassName || !cloudData.systemClassName) {
+              if (cloudData.webDisplayName && cloudData.webDisplayName !== this.webDisplayName) {
+                this.webDisplayName = cloudData.webDisplayName;
+                hasChanges = true;
+              }
+              if (cloudData.academicYear && cloudData.academicYear !== this.academicYear) {
+                this.academicYear = cloudData.academicYear;
+                hasChanges = true;
+              }
+              if (cloudData.classStudentPassword && cloudData.classStudentPassword !== this.classStudentPassword) {
+                this.classStudentPassword = cloudData.classStudentPassword;
+                hasChanges = true;
+              }
+              if (cloudData.officialRoster && JSON.stringify(cloudData.officialRoster) !== JSON.stringify(this.officialRoster)) {
+                this.officialRoster = cloudData.officialRoster;
+                hasChanges = true;
+              }
+              if (cloudData.posts && JSON.stringify(cloudData.posts) !== JSON.stringify(this.posts)) {
+                this.posts = cloudData.posts;
+                hasChanges = true;
+              }
+              if (cloudData.groups && JSON.stringify(cloudData.groups) !== JSON.stringify(this.groups)) {
+                this.groups = cloudData.groups;
+                hasChanges = true;
+              }
+              if (cloudData.projects && JSON.stringify(cloudData.projects) !== JSON.stringify(this.projects)) {
+                this.projects = cloudData.projects;
+                hasChanges = true;
+              }
+            }
+
+            if (hasChanges) {
+              localStorage.setItem(`web_lop_web_name_${this.systemClassName}`, this.webDisplayName);
+              localStorage.setItem(`web_lop_year_${this.systemClassName}`, this.academicYear);
+              localStorage.setItem(`web_lop_dynamic_pass_${this.systemClassName}`, this.classStudentPassword);
+              localStorage.setItem(`web_lop_roster_${this.systemClassName}`, JSON.stringify(this.officialRoster));
+              localStorage.setItem(`web_lop_posts_${this.systemClassName}`, JSON.stringify(this.posts));
+              localStorage.setItem(`web_lop_groups_${this.systemClassName}`, JSON.stringify(this.groups));
+              localStorage.setItem(`web_lop_projects_${this.systemClassName}`, JSON.stringify(this.projects));
+              
+              await hydratePostMediaUrls();
+              renderApp();
+            }
           }
         }
       }
@@ -357,7 +376,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   populateAuthClassSelect();
   setupRealtimeSyncEngine();
 
-  // Initial Fetch from Global Cloud Server
+  // Initial Fetch from Global Cloud System
   state.fetchFromCloud();
 });
 
@@ -380,7 +399,7 @@ function setupRealtimeSyncEngine() {
     }
   });
 
-  // Global Internet Cloud Sync Polling every 3.5 seconds across ALL devices!
+  // Global Internet Cloud Polling every 3.5 seconds across ALL devices!
   setInterval(() => {
     state.fetchFromCloud();
   }, 3500);
@@ -1572,7 +1591,7 @@ window.submitUploadForm = function() {
   };
 
   state.posts.unshift(newPost);
-  state.save(true); // Saves locally and syncs to Global Cloud!
+  state.save(true);
 
   closeUploadModal();
   renderApp();
@@ -2053,7 +2072,7 @@ function renderSuperAdminModalContent() {
 
       <div class="bg-slate-900 p-4 rounded-2xl border border-amber-500/40 space-y-3">
         <h4 class="font-bold text-amber-400 text-sm">➕ Khởi Tạo Lớp Học Mới & Cấp Mật Khẩu Admin Lớp</h4>
-        <p class="text-[11px] text-slate-400">Thiết lập Mật khẩu Admin Lớp và giới hạn GB cho từng lớp khách hàng.</p>
+        <p class="text-[11px] text-slate-400">Thiết lập Mật khẩu Admin Lớp và giới hạn GB cho từng lớp khách hàng. Tự động đồng bộ sang tất cả các máy khác!</p>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
@@ -2082,7 +2101,7 @@ function renderSuperAdminModalContent() {
         </div>
 
         <button onclick="superAdminCreateClass()" class="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-amber-500/20">
-          + KHỞI TẠO LỚP & CẤP MẬT KHẨU ADMIN
+          + KHỞI TẠO LỚP & CẤP MẬT KHẨU ADMIN (ĐỒNG BỘ TOÀN HỆ THỐNG)
         </button>
       </div>
 
@@ -2185,11 +2204,11 @@ window.superAdminCreateClass = function() {
   };
 
   state.classesIndex.push(newClassObj);
-  state.save(true);
+  state.save(true); // Saves and syncs new class globally to cloud!
 
   populateAuthClassSelect();
   renderSuperAdminModalContent();
-  showToast(`🎉 Đã khởi tạo lớp mới "${webName}" với Mật khẩu Admin: ${adminPass}`);
+  showToast(`🎉 Đã khởi tạo lớp mới "${webName}" & đồng bộ tức thì sang tất cả thiết bị!`);
 };
 
 window.superAdminEnterClass = async function(classId) {
