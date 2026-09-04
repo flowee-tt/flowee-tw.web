@@ -208,6 +208,9 @@ class AppState {
       syncChannel.postMessage({ type: 'DATA_UPDATED', classCode: this.systemClassName, timestamp: Date.now() });
     }
 
+    // Broadcast Instant WebRTC Peer-to-Peer Sync
+    broadcastPeerState();
+
     // Push Unified State to Global REST Vault
     this.pushToCloud();
   }
@@ -415,7 +418,162 @@ document.addEventListener('DOMContentLoaded', async () => {
   state.fetchFromCloud();
 });
 
+let peerInstance = null;
+let activePeerConnections = [];
+
+function setupPeerSyncEngine() {
+  if (typeof Peer === 'undefined') return;
+
+  try {
+    const roomPeerId = 'weblop_v2_hub_' + (state.systemClassName || '11a6').toLowerCase();
+
+    peerInstance = new Peer(roomPeerId, {
+      debug: 0,
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      }
+    });
+
+    peerInstance.on('open', (id) => {
+      console.log('🌐 WebRTC Peer Hub Active:', id);
+    });
+
+    peerInstance.on('connection', (conn) => {
+      if (!activePeerConnections.includes(conn)) activePeerConnections.push(conn);
+
+      conn.on('data', async (data) => {
+        if (data && data.type === 'SYNC_REQUEST') {
+          conn.send({
+            type: 'SYNC_FULL_STATE',
+            payload: getGlobalStatePayload()
+          });
+        } else if (data && data.type === 'SYNC_PUSH_STATE') {
+          await applyRemoteState(data.payload);
+        }
+      });
+
+      conn.on('close', () => {
+        activePeerConnections = activePeerConnections.filter(c => c !== conn);
+      });
+    });
+
+    peerInstance.on('error', (err) => {
+      if (err.type === 'unavailable-id') {
+        // Room ID is hosted by another active device (e.g. Laptop). Connect as client peer!
+        const clientPeer = new Peer();
+        clientPeer.on('open', () => {
+          const conn = clientPeer.connect(roomPeerId);
+          if (conn) {
+            conn.on('open', () => {
+              if (!activePeerConnections.includes(conn)) activePeerConnections.push(conn);
+              conn.send({ type: 'SYNC_REQUEST' });
+            });
+            conn.on('data', async (data) => {
+              if (data && data.payload) {
+                await applyRemoteState(data.payload);
+              }
+            });
+          }
+        });
+      }
+    });
+  } catch(e) {
+    console.warn("PeerJS init exception:", e);
+  }
+}
+
+function getGlobalStatePayload() {
+  return {
+    classesIndex: state.classesIndex,
+    systemClassName: state.systemClassName,
+    webDisplayName: state.webDisplayName,
+    academicYear: state.academicYear,
+    classStudentPassword: state.classStudentPassword,
+    classAdminPassword: state.classAdminPassword,
+    officialRoster: state.officialRoster,
+    posts: state.posts,
+    groups: state.groups,
+    projects: state.projects,
+    updatedAt: Date.now()
+  };
+}
+
+function broadcastPeerState(payload) {
+  const p = payload || getGlobalStatePayload();
+  for (let conn of activePeerConnections) {
+    try {
+      if (conn.open) {
+        conn.send({ type: 'SYNC_PUSH_STATE', payload: p });
+      }
+    } catch(e) {}
+  }
+}
+
+async function applyRemoteState(remoteData) {
+  if (!remoteData || !remoteData.updatedAt || remoteData.updatedAt <= state.lastCloudUpdatedAt) return;
+  state.lastCloudUpdatedAt = remoteData.updatedAt;
+
+  let hasChanges = false;
+
+  if (Array.isArray(remoteData.classesIndex) && JSON.stringify(remoteData.classesIndex) !== JSON.stringify(state.classesIndex)) {
+    state.classesIndex = remoteData.classesIndex;
+    localStorage.setItem(SYSTEM_CLASSES_KEY, JSON.stringify(state.classesIndex));
+    hasChanges = true;
+  }
+
+  if (remoteData.systemClassName === state.systemClassName || !remoteData.systemClassName) {
+    if (remoteData.webDisplayName && remoteData.webDisplayName !== state.webDisplayName) {
+      state.webDisplayName = remoteData.webDisplayName;
+      hasChanges = true;
+    }
+    if (remoteData.academicYear && remoteData.academicYear !== state.academicYear) {
+      state.academicYear = remoteData.academicYear;
+      hasChanges = true;
+    }
+    if (remoteData.officialRoster && JSON.stringify(remoteData.officialRoster) !== JSON.stringify(state.officialRoster)) {
+      state.officialRoster = remoteData.officialRoster;
+      hasChanges = true;
+    }
+    if (remoteData.posts && JSON.stringify(remoteData.posts) !== JSON.stringify(state.posts)) {
+      state.posts = remoteData.posts;
+      hasChanges = true;
+    }
+    if (remoteData.groups && JSON.stringify(remoteData.groups) !== JSON.stringify(state.groups)) {
+      state.groups = remoteData.groups;
+      hasChanges = true;
+    }
+    if (remoteData.projects && JSON.stringify(remoteData.projects) !== JSON.stringify(state.projects)) {
+      state.projects = remoteData.projects;
+      hasChanges = true;
+    }
+  }
+
+  if (hasChanges) {
+    const idxClass = state.classesIndex.find(c => c.systemName === state.systemClassName);
+    if (idxClass) {
+      idxClass.webName = state.webDisplayName;
+      idxClass.year = state.academicYear;
+    }
+    localStorage.setItem(SYSTEM_CLASSES_KEY, JSON.stringify(state.classesIndex));
+    localStorage.setItem(`web_lop_web_name_${state.systemClassName}`, state.webDisplayName);
+    localStorage.setItem(`web_lop_year_${state.systemClassName}`, state.academicYear);
+    localStorage.setItem(`web_lop_roster_${state.systemClassName}`, JSON.stringify(state.officialRoster));
+    localStorage.setItem(`web_lop_posts_${state.systemClassName}`, JSON.stringify(state.posts));
+    localStorage.setItem(`web_lop_groups_${state.systemClassName}`, JSON.stringify(state.groups));
+    localStorage.setItem(`web_lop_projects_${state.systemClassName}`, JSON.stringify(state.projects));
+
+    populateAuthClassSelect();
+    await hydratePostMediaUrls();
+    renderApp();
+  }
+}
+
 function setupRealtimeSyncEngine() {
+  setupPeerSyncEngine();
+
   if (syncChannel) {
     syncChannel.onmessage = async (e) => {
       if (e.data && e.data.classCode === state.systemClassName) {
@@ -434,10 +592,20 @@ function setupRealtimeSyncEngine() {
     }
   });
 
-  // Fast Global Realtime Polling every 2.0 seconds!
+  // Trigger sync immediately on tab focus or visibility change
+  window.addEventListener('focus', () => state.fetchFromCloud());
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      state.fetchFromCloud();
+    }
+  });
+
+  // Smart Polling every 10 seconds (only when tab is active) to eliminate 429 API rate limits
   setInterval(() => {
-    state.fetchFromCloud();
-  }, 2000);
+    if (document.visibilityState === 'visible') {
+      state.fetchFromCloud();
+    }
+  }, 10000);
 }
 
 async function hydratePostMediaUrls() {
