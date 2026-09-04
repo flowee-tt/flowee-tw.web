@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Web Kỷ Niệm Lớp — Commercial Multi-Class Portal</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- JSZip CDN for archiving & zip downloads -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+  <!-- Custom Design Tokens -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="text-slate-100 antialiased selection:bg-amber-500 selection:text-slate-950">
+
+  <!-- ==========================================
+       TOP NAVIGATION BAR (DESKTOP & MOBILE HEADER)
+       ========================================== -->
+  <header class="sticky top-0 z-40 glass-nav">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
+      
+      <!-- Brand Logo -->
+      <div class="flex items-center gap-2.5 cursor-pointer" onclick="state.activeTab = 'timeline'; renderApp();">
+        <div id="brand-logo-text" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-amber-500 via-amber-400 to-amber-600 flex items-center justify-center text-slate-950 font-black text-xs sm:text-sm text-center shadow-lg shadow-amber-500/20">
+          A6
+        </div>
+        <div>
+          <h1 class="font-extrabold text-sm sm:text-base tracking-tight text-slate-100 flex items-center gap-1.5">
+            <span id="header-title-text">WEB LỚP A6</span>
+            <span class="text-[9px] sm:text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded-full font-bold">OFFICIAL</span>
+          </h1>
+          <p id="header-sub-text" class="text-[9px] sm:text-[10px] text-slate-400 font-medium">Memory & Project Portal</p>
+        </div>
+      </div>
+
+      <!-- Desktop Navigation Tabs -->
+      <nav class="hidden md:flex items-center gap-1 bg-slate-900/60 p-1.5 rounded-2xl border border-slate-800">
+        <button id="nav-timeline" class="px-4 py-2 rounded-xl text-sm font-semibold transition-all">
+          <span>📅 Trang Chủ (Timeline)</span>
+        </button>
+        <button id="nav-groups" class="px-4 py-2 rounded-xl text-sm font-semibold transition-all">
+          <span>📂 Góc Nhóm Riêng</span>
+        </button>
+        <button id="nav-projects" class="px-4 py-2 rounded-xl text-sm font-semibold transition-all">
+          <span>📁 Kho Dự Án</span>
+        </button>
+      </nav>
+
+      <!-- Global Search Bar, Class Admin, Upload & Logout Triggers -->
+      <div class="flex items-center gap-2">
+        <div class="relative hidden sm:block w-36 lg:w-44">
+          <input type="text" id="global-search" placeholder="🔍 Tìm ảnh, video..." 
+                 class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-1.5 text-xs text-slate-100 placeholder-slate-400 focus:outline-none focus:border-amber-500 transition-all">
+        </div>
+
+        <!-- Class Admin Control Panel Button (Only visible if Admin Lớp) -->
+        <button id="admin-nav-btn" onclick="openAdminModal()" class="hidden px-2.5 sm:px-3 py-1.5 sm:py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-1">
+          <span>⚙️ Quản Trị Lớp</span>
+        </button>
+
+        <!-- Prominent Quick Upload Button (Desktop) -->
+        <button onclick="openUploadModal()" class="hidden sm:flex px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-extrabold text-xs rounded-xl shadow-lg shadow-amber-500/20 transition-all items-center gap-1.5">
+          <span class="text-sm">➕</span>
+          <span>Tải Ảnh / Video</span>
+        </button>
+
+        <!-- Profile Avatar Button -->
+        <button id="user-profile-btn" onclick="openProfileModal()" title="Click để đổi Avatar & Biệt danh" class="flex items-center gap-2 bg-slate-900/80 p-1 rounded-xl border border-slate-800 hover:border-slate-700 transition-all">
+          <!-- Populated by JS -->
+        </button>
+
+        <!-- PROMINENT LOGOUT BUTTON FOR ALL USERS -->
+        <button id="global-logout-btn" onclick="handleLogout()" title="Đăng Xuất Tài Khoản" class="px-2.5 py-1.5 bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 border border-rose-500/40 font-bold text-xs rounded-xl transition-all flex items-center gap-1">
+          <span>🚪 Đăng Xuất</span>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- MOBILE FLOATING ACTION BUTTON (FAB) FOR UPLOAD -->
+  <button onclick="openUploadModal()" class="fab-upload-btn" title="Tải ảnh/video mới">
+    ➕
+  </button>
+
+  <!-- MOBILE BOTTOM NAVIGATION BAR -->
+  <nav class="mobile-bottom-nav">
+    <button onclick="state.activeTab = 'timeline'; renderTabContent();" class="mobile-nav-item" id="mnav-timeline">
+      <span class="text-lg">🏠</span>
+      <span>Trang chủ</span>
+    </button>
+    <button onclick="state.activeTab = 'groups'; renderTabContent();" class="mobile-nav-item" id="mnav-groups">
+      <span class="text-lg">📂</span>
+      <span>Góc Nhóm</span>
+    </button>
+    <button onclick="state.activeTab = 'projects'; renderTabContent();" class="mobile-nav-item" id="mnav-projects">
+      <span class="text-lg">📁</span>
+      <span>Kho Dự Án</span>
+    </button>
+    <button onclick="openProfileModal()" class="mobile-nav-item">
+      <span class="text-lg">👤</span>
+      <span>Cá Nhân</span>
+    </button>
+  </nav>
+
+  <!-- ==========================================
+       MAIN CONTENT CONTAINER
+       ========================================== -->
+  <main class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
+
+    <!-- VIEW 1: TIMELINE FEED (TRANG CHỦ) -->
+    <div id="view-timeline" class="space-y-4 sm:space-y-6">
+
+      <!-- Hero Memory Banner -->
+      <div class="glass p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-amber-500/20 bg-gradient-to-r from-amber-950/30 via-slate-900/80 to-slate-900 relative overflow-hidden">
+        <div class="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div>
+            <div id="hero-year-text" class="inline-flex items-center gap-2 text-[11px] sm:text-xs font-bold text-amber-400 bg-amber-500/10 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full border border-amber-500/20 mb-2">
+              ✨ Niên khóa 2023 - 2026 • THPT
+            </div>
+            <h2 id="hero-title-text" class="text-xl sm:text-3xl font-extrabold text-slate-100 tracking-tight">
+              Dòng Thời Gian Kỷ Niệm Lớp A6 🎓
+            </h2>
+            <p class="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl">
+              Nơi lưu giữ từng khoảnh khắc thanh xuân, các chuyến đi trại, video clip nảy lửa và các dự án sáng tạo của tập thể lớp chúng mình.
+            </p>
+          </div>
+
+          <!-- Counter Stats -->
+          <div class="flex items-center justify-around w-full md:w-auto bg-slate-950/60 p-2.5 sm:p-3 rounded-2xl border border-slate-800">
+            <div class="text-center px-2 sm:px-3">
+              <div id="stat-group-count" class="text-base sm:text-lg font-extrabold text-amber-400">0 Nhóm</div>
+              <div class="text-[9px] sm:text-[10px] text-slate-400 font-medium uppercase">Nhóm riêng</div>
+            </div>
+            <div class="w-px h-7 bg-slate-800"></div>
+            <div class="text-center px-2 sm:px-3">
+              <div id="stat-photo-count" class="text-base sm:text-lg font-extrabold text-indigo-400">0 Bài viết</div>
+              <div class="text-[9px] sm:text-[10px] text-slate-400 font-medium uppercase">Kỷ niệm</div>
+            </div>
+            <div class="w-px h-7 bg-slate-800"></div>
+            <div class="text-center px-2 sm:px-3">
+              <div id="stat-proj-count" class="text-base sm:text-lg font-extrabold text-emerald-400">0 Dự án</div>
+              <div class="text-[9px] sm:text-[10px] text-slate-400 font-medium uppercase">Kho dự án</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Smart Filter & Search Toolbar -->
+      <div class="glass p-3 sm:p-4 rounded-2xl border border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        
+        <div class="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 text-xs">
+          <!-- Month/Year Filter -->
+          <select id="filter-month" class="bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-amber-500">
+            <!-- Populated by JS -->
+          </select>
+
+          <!-- Uploader Filter -->
+          <select id="filter-uploader" class="bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-amber-500">
+            <!-- Populated by JS -->
+          </select>
+
+          <!-- Sort Filter -->
+          <select id="filter-sort" class="col-span-2 sm:col-span-1 bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-amber-500">
+            <option value="NEWEST">🔥 Mới nhất xếp trước</option>
+            <option value="OLDEST">⏳ Cũ nhất xếp trước</option>
+            <option value="MOST_LIKED">❤️ Nhiều thả tim nhất</option>
+          </select>
+        </div>
+
+        <!-- Quick Hashtags Chips -->
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <span class="text-slate-400 font-medium hidden sm:inline">Lọc:</span>
+          <button onclick="filterByTag('#KyNiem')" class="px-2 py-1 bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded-lg font-semibold text-[11px]">#KyNiem</button>
+          <button onclick="filterByTag('#Video')" class="px-2 py-1 bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 rounded-lg font-semibold text-[11px]">#Video</button>
+          <button onclick="resetFilters()" class="px-2 py-1 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 text-[11px]">Tất cả</button>
+        </div>
+
+      </div>
+
+      <!-- Timeline Feed Content Stem -->
+      <div class="timeline-container" id="timeline-feed">
+        <!-- Rendered by app.js -->
+      </div>
+
+    </div>
+
+    <!-- VIEW 2: GROUPS HUB (GÓC NHÓM RIÊNG) -->
+    <div id="view-groups" class="hidden">
+      <div id="groups-container">
+        <!-- Rendered by app.js -->
+      </div>
+    </div>
+
+    <!-- VIEW 2.5: GROUP DETAIL SPACE -->
+    <div id="view-group-detail" class="hidden">
+      <div id="group-detail-container">
+        <!-- Rendered by app.js -->
+      </div>
+    </div>
+
+    <!-- VIEW 3: PROJECTS VAULT (KHO DỰ ÁN LỚP) -->
+    <div id="view-projects" class="hidden">
+      <div id="projects-container">
+        <!-- Rendered by app.js -->
+      </div>
+    </div>
+
+  </main>
+
+  <!-- CLEAN FOOTER -->
+  <footer class="max-w-7xl mx-auto px-4 py-6 border-t border-slate-800/60 mt-8 text-center text-xs text-slate-500">
+    <div class="flex items-center justify-center gap-2">
+      <span>© 2026 Memory & Project Vault</span>
+      <span>•</span>
+      <span>Trang Kỷ Niệm Học Sinh Lớp</span>
+    </div>
+  </footer>
+
+  <!-- ==========================================
+       MODAL 1: QUICK UPLOAD MODAL (MULTI PHOTO / VIDEO)
+       ========================================== -->
+  <div id="upload-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 hidden">
+    <div class="glass max-w-xl w-full rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-amber-500/30 space-y-4 fade-in max-h-[90vh] overflow-y-auto">
+      
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-base sm:text-lg font-extrabold text-slate-100 flex items-center gap-2">
+          <span>🎬 Tải Ảnh / Video / Kỷ Niệm Mới</span>
+        </h3>
+        <button onclick="closeUploadModal()" class="text-slate-400 hover:text-slate-100 font-bold p-1">✕</button>
+      </div>
+
+      <div id="upload-dropzone" class="dropzone p-5 sm:p-6 rounded-2xl text-center cursor-pointer relative">
+        <input type="file" id="file-input" accept="image/*,video/*,.pdf,.docx,.zip" multiple class="absolute inset-0 opacity-0 cursor-pointer" onchange="handleFileSelect(event)">
+        <div class="text-3xl mb-2">☁️</div>
+        <div class="text-xs sm:text-sm font-bold text-slate-200">Kéo thả hoặc chọn HÀNG LOẠT ẢNH / VIDEO từ thiết bị của bạn</div>
+        <div class="text-[10px] sm:text-xs text-slate-400 mt-1">Chọn nhiều ảnh, video clip (.mp4, .webm, .mov) cùng lúc</div>
+      </div>
+
+      <div id="upload-progress-bar" class="hidden space-y-1">
+        <div class="flex justify-between text-[11px] text-amber-300 font-bold">
+          <span id="upload-progress-text">Đang xử lý tệp...</span>
+          <span id="upload-progress-percent">0%</span>
+        </div>
+        <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+          <div id="upload-progress-fill" class="bg-amber-500 h-2 rounded-full transition-all duration-200" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <div id="upload-preview" class="hidden"></div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">✍️ Caption / Chú thích kỷ niệm:</label>
+          <textarea id="upload-caption" rows="3" placeholder="Nhập suy nghĩ, lời nhắn nhủ, kỉ niệm..." class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-slate-100 focus:outline-none focus:border-amber-500"></textarea>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-300 font-semibold mb-1">📅 Ngày chụp / Ngày tạo:</label>
+            <input type="date" id="upload-date-input" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-100 focus:outline-none focus:border-amber-500">
+          </div>
+
+          <div>
+            <label class="block text-slate-300 font-semibold mb-1">🎯 Đăng vào không gian:</label>
+            <select id="upload-space-select" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-100 focus:outline-none focus:border-amber-500">
+              <!-- Populated by JS -->
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">🏷️ Hashtags (Cách nhau bởi khoảng trắng):</label>
+          <input type="text" id="upload-hashtags" placeholder="#KyNiem #Video #ThanhXuan" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-100 focus:outline-none focus:border-amber-500">
+        </div>
+      </div>
+
+      <div class="pt-3 border-t border-slate-800 flex justify-end gap-3">
+        <button onclick="closeUploadModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl">
+          Hủy bỏ
+        </button>
+        <button onclick="submitUploadForm()" class="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold rounded-xl shadow-lg shadow-amber-500/20">
+          Đăng Tải Ngay 🚀
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==========================================
+       MODAL 2: LIGHTBOX VIEWER
+       ========================================== -->
+  <div id="lightbox-modal" class="hidden"></div>
+
+  <!-- ==========================================
+       MODAL 3: PROFILE & CUSTOM AVATAR MODAL
+       ========================================== -->
+  <div id="profile-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass max-w-md w-full rounded-2xl sm:rounded-3xl p-5 sm:p-6 border border-amber-500/30 space-y-4 fade-in">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-base font-extrabold text-slate-100 flex items-center gap-2">
+          <span>✏️ Biệt Danh & Avatar Cá Nhân</span>
+        </h3>
+        <button onclick="closeProfileModal()" class="text-slate-400 hover:text-slate-100 font-bold p-1">✕</button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <div class="flex items-center gap-4 bg-slate-900/80 p-3 rounded-2xl border border-slate-800">
+          <img id="profile-avatar-preview" src="https://api.dicebear.com/7.x/bottts/svg?seed=User" class="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover border-2 border-amber-400 bg-slate-800" alt="Avatar">
+          <div>
+            <label class="block text-slate-300 font-semibold mb-1">🖼️ Cài Ảnh Đại Diện (Avatar):</label>
+            <input type="file" id="profile-avatar-input" accept="image/*" class="hidden" onchange="handleProfileAvatarSelect(event)">
+            <button onclick="document.getElementById('profile-avatar-input').click()" class="px-3 py-1.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-xl font-bold hover:bg-amber-500/30 text-[11px]">
+              📸 Tải Ảnh Mới Từ Máy
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">👤 Họ và Tên Thật:</label>
+          <input type="text" id="profile-real-name" placeholder="VD: Nguyễn Văn Nam" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-100 focus:outline-none opacity-80" readonly>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">🏷️ Tự Đặt Biệt Danh (Tùy chọn):</label>
+          <input type="text" id="profile-nickname" placeholder="VD: Nam Sút Xoáy, Mai Công Công..." class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-100 focus:outline-none focus:border-amber-500">
+        </div>
+      </div>
+
+      <div class="pt-3 border-t border-slate-800 flex justify-between items-center">
+        <button onclick="closeProfileModal(); handleLogout();" class="text-xs text-rose-400 hover:underline font-bold flex items-center gap-1">
+          <span>🚪 Đăng Xuất Tài Khoản</span>
+        </button>
+
+        <div class="flex gap-2">
+          <button onclick="closeProfileModal()" class="px-3 py-2 bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl">Hủy</button>
+          <button onclick="saveProfileNames()" class="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold rounded-xl shadow-lg shadow-amber-500/20">Lưu Dữ Liệu</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       MODAL 4: CREATE GROUP & MEMBER CHECKLIST MODAL
+       ========================================== -->
+  <div id="create-group-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass max-w-md w-full rounded-2xl sm:rounded-3xl p-5 sm:p-6 border border-indigo-500/40 space-y-4 fade-in max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-base font-extrabold text-slate-100 flex items-center gap-2">
+          <span>📂 Tạo Nhóm Riêng & Chọn Thành Viên</span>
+        </h3>
+        <button onclick="closeCreateGroupModal()" class="text-slate-400 hover:text-slate-100 font-bold p-1">✕</button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">Tên Nhóm (VD: Nhóm Múa, Team Đá Bóng...):</label>
+          <input type="text" id="create-group-name" placeholder="Nhập tên nhóm..." class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-100 focus:outline-none focus:border-indigo-500">
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">Mô Tả Nhóm:</label>
+          <textarea id="create-group-desc" rows="2" placeholder="Mô tả mục đích hoạt động nhóm..." class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-100 focus:outline-none focus:border-indigo-500"></textarea>
+        </div>
+
+        <!-- Member Checklist Selector -->
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">👥 Chọn Thành Viên Trong Nhóm (Từ Roster Lớp):</label>
+          <div id="group-members-checklist" class="max-h-36 overflow-y-auto space-y-1.5 border border-slate-800 rounded-xl p-2 bg-slate-950/60">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">🖼️ Chọn & Tải Ảnh Bìa/Avatar Nhóm:</label>
+          <div id="group-cover-dropzone" class="dropzone p-4 rounded-xl text-center cursor-pointer relative">
+            <input type="file" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer" onchange="handleGroupCoverSelect(event)">
+            <div class="text-2xl mb-1">📸</div>
+            <div class="text-xs font-bold text-indigo-300">Click để chọn hoặc tải ảnh bìa cho nhóm</div>
+          </div>
+          <div id="group-cover-preview" class="hidden mt-2"></div>
+        </div>
+
+        <div class="flex items-center gap-2 pt-1">
+          <input type="checkbox" id="create-group-private" checked class="accent-indigo-500 w-4 h-4">
+          <label for="create-group-private" class="text-slate-300 font-medium">Chỉ thành viên trong nhóm mới xem được bài 🔒</label>
+        </div>
+      </div>
+
+      <div class="pt-3 border-t border-slate-800 flex justify-end gap-2">
+        <button onclick="closeCreateGroupModal()" class="px-4 py-2 bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl">Hủy</button>
+        <button onclick="submitCreateGroupForm()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-extrabold rounded-xl shadow-lg shadow-indigo-500/20">
+          Tạo Nhóm Ngay 🚀
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       MODAL 4.5: CHANGE GROUP COVER MODAL
+       ========================================== -->
+  <div id="change-group-cover-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass max-w-md w-full rounded-2xl sm:rounded-3xl p-5 sm:p-6 border border-amber-500/40 space-y-4 fade-in">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-base font-extrabold text-slate-100 flex items-center gap-2">
+          <span>🖼️ Thay Đổi Ảnh Bìa Cho Nhóm</span>
+        </h3>
+        <button onclick="closeChangeGroupCoverModal()" class="text-slate-400 hover:text-slate-100 font-bold p-1">✕</button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div id="change-cover-dropzone" class="dropzone p-6 rounded-2xl text-center cursor-pointer relative">
+          <input type="file" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer" onchange="handleChangeCoverSelect(event)">
+          <div class="text-3xl mb-2">📸</div>
+          <div class="text-xs font-bold text-amber-300">Click hoặc kéo thả hình ảnh mới vào đây</div>
+        </div>
+
+        <div id="change-cover-preview" class="hidden"></div>
+      </div>
+
+      <div class="pt-3 border-t border-slate-800 flex justify-end gap-2">
+        <button onclick="closeChangeGroupCoverModal()" class="px-4 py-2 bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl">Hủy</button>
+        <button onclick="submitChangeGroupCover()" class="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold rounded-xl shadow-lg shadow-amber-500/20">
+          Lưu Ảnh Bìa Mới 🖼️
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       MODAL 5: UPLOAD FILE TO SPECIFIC PROJECT
+       ========================================== -->
+  <div id="upload-project-file-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass max-w-md w-full rounded-2xl sm:rounded-3xl p-5 sm:p-6 border border-emerald-500/40 space-y-4 fade-in">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div>
+          <h3 class="text-base font-extrabold text-slate-100 flex items-center gap-2">
+            <span>➕ Tải Tệp / Tài Liệu Cho Dự Án</span>
+          </h3>
+          <p id="project-file-title" class="text-[11px] text-emerald-400 font-medium mt-0.5"></p>
+        </div>
+        <button onclick="closeAddFileToProjectModal()" class="text-slate-400 hover:text-slate-100 font-bold p-1">✕</button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div id="project-file-dropzone" class="dropzone p-6 rounded-2xl text-center cursor-pointer relative">
+          <input type="file" accept=".pdf,.docx,.mp4,.zip,image/*" class="absolute inset-0 opacity-0 cursor-pointer" onchange="handleProjectFileSelect(event)">
+          <div class="text-3xl mb-2">📁</div>
+          <div class="text-xs font-bold text-slate-200">Chọn hoặc kéo thả tệp đính kèm vào đây</div>
+          <div class="text-[10px] text-slate-400 mt-1">Hỗ trợ: .pdf, .docx, .mp4, .zip, .png, .jpg</div>
+        </div>
+
+        <div id="project-file-preview" class="hidden"></div>
+      </div>
+
+      <div class="pt-3 border-t border-slate-800 flex justify-end gap-2">
+        <button onclick="closeAddFileToProjectModal()" class="px-4 py-2 bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl">Hủy</button>
+        <button onclick="submitProjectFileUpload()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold rounded-xl shadow-lg shadow-emerald-500/20">
+          Đính Kèm Tệp Ngay 🚀
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       MODAL 6: CLASS ADMIN CONTROL PANEL
+       ========================================== -->
+  <div id="admin-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 hidden">
+    <div class="glass max-w-xl w-full rounded-2xl sm:rounded-3xl p-5 sm:p-6 border border-indigo-500/40 space-y-4 fade-in max-h-[90vh] overflow-y-auto">
+      
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-base sm:text-lg font-extrabold text-slate-100 flex items-center gap-2">
+          <span>⚙️ Bảng Quản Trị Lớp (Class Admin Control)</span>
+        </h3>
+        <button onclick="closeAdminModal()" class="text-slate-400 hover:text-slate-100 font-bold p-1">✕</button>
+      </div>
+
+      <div id="admin-modal-body">
+        <!-- Rendered by app.js -->
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==========================================
+       MODAL 7: SUPER ADMIN COMMERCIAL SYSTEM CONTROL (DUAL GATEWAY MODAL)
+       ========================================== -->
+  <div id="super-admin-modal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-xl z-50 flex items-center justify-center p-3 sm:p-4 hidden">
+    <div class="glass max-w-2xl w-full rounded-2xl sm:rounded-3xl p-5 sm:p-6 border border-amber-500/50 space-y-4 fade-in max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-base sm:text-lg font-black text-amber-400 flex items-center gap-2">
+          <span>🏢 BẢNG QUẢN TRỊ HỆ THỐNG ĐA LỚP (SUPER ADMIN)</span>
+        </h3>
+        <button onclick="closeSuperAdminModal()" class="text-slate-400 hover:text-slate-100 font-bold p-1">✕</button>
+      </div>
+
+      <div id="super-admin-body">
+        <!-- Rendered by app.js -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       MODAL 8: ULTRA-SLEEK INSTAGRAM/FACEBOOK STYLE AUTH GATEWAY
+       ========================================== -->
+  <div id="whitelist-modal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-2xl z-50 flex items-center justify-center p-3 sm:p-4 hidden">
+    <div class="glass max-w-md w-full rounded-3xl p-6 sm:p-8 border border-amber-500/30 text-center space-y-5 fade-in max-h-[95vh] overflow-y-auto shadow-2xl relative">
+      
+      <!-- Brand App Badge (Instagram / Facebook Glow Style) -->
+      <div class="relative w-16 h-16 mx-auto">
+        <div class="absolute inset-0 rounded-2xl bg-gradient-to-tr from-amber-500 via-rose-500 to-indigo-600 blur-md opacity-70 animate-pulse"></div>
+        <div class="relative w-16 h-16 bg-slate-950 border border-white/20 text-amber-400 rounded-2xl flex items-center justify-center text-3xl font-black shadow-xl">
+          🏫
+        </div>
+      </div>
+
+      <div>
+        <h3 id="auth-title" class="text-xl sm:text-2xl font-black text-slate-100 tracking-tight">CỔNG ĐĂNG NHẬP LỚP</h3>
+        <p class="text-xs text-slate-400 mt-1">Chọn Lớp học và nhập thông tin để truy cập không gian kỷ niệm.</p>
+      </div>
+
+      <!-- Segmented Mode Switcher (IG/FB App Pill Style) -->
+      <div class="flex bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800 gap-1">
+        <button id="auth-tab-student" onclick="setAuthMode('STUDENT')" class="flex-1 py-2.5 rounded-xl text-xs font-extrabold bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-lg transition-all duration-300">
+          🎓 Học Sinh Lớp
+        </button>
+        <button id="auth-tab-admin" onclick="setAuthMode('CLASS_ADMIN')" class="flex-1 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-200 transition-all">
+          🔑 Admin Lớp
+        </button>
+      </div>
+
+      <div class="space-y-4 text-xs text-left">
+        <!-- Class Selector Dropdown -->
+        <div>
+          <label class="block text-slate-300 font-bold mb-1.5 flex items-center gap-1.5">
+            <span>🏫</span> <span>Chọn Lớp Học Của Bạn:</span>
+          </label>
+          <select id="auth-class-select" onchange="handleAuthClassChange(event)" class="w-full bg-slate-900/90 border border-amber-500/50 rounded-2xl p-3 text-amber-300 font-extrabold focus:outline-none focus:border-amber-400 shadow-inner">
+            <!-- Populated dynamically by app.js -->
+          </select>
+        </div>
+
+        <!-- Student Login Mode Fields -->
+        <div id="auth-student-fields" class="space-y-3.5">
+          <div>
+            <label class="block text-slate-300 font-bold mb-1.5 flex items-center gap-1.5">
+              <span>👤</span> <span>Họ và Tên Thật (Có trong danh sách lớp):</span>
+            </label>
+            <input type="text" id="auth-real-name" placeholder="VD: Nguyễn Văn Nam" class="w-full bg-slate-900/90 border border-slate-700/80 rounded-2xl p-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-all">
+          </div>
+
+          <div>
+            <label class="block text-slate-300 font-bold mb-1.5 flex items-center gap-1.5">
+              <span>🏷️</span> <span>Biệt Danh Của Bạn (Tùy chọn):</span>
+            </label>
+            <input type="text" id="auth-nickname" placeholder="VD: Nam Sút Xoáy..." class="w-full bg-slate-900/90 border border-slate-700/80 rounded-2xl p-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-all">
+          </div>
+
+          <div>
+            <label class="block text-slate-300 font-bold mb-1.5 flex items-center gap-1.5">
+              <span>🔒</span> <span>Mật Khẩu Học Sinh (Admin Lớp cấp):</span>
+            </label>
+            <div class="relative">
+              <input type="password" id="auth-pass" placeholder="Nhập Mật khẩu học sinh (hoặc PIN Super Admin)..." class="w-full bg-slate-900/90 border border-slate-700/80 rounded-2xl p-3 pr-10 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-all">
+              <button type="button" onclick="togglePasswordVisibility('auth-pass', 'eye-student')" class="absolute right-3 top-3 text-slate-400 hover:text-slate-100 text-sm">
+                <span id="eye-student">👁️</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Admin Login Mode Fields -->
+        <div id="auth-admin-fields" class="hidden space-y-3.5">
+          <div class="bg-indigo-500/10 p-3 rounded-2xl border border-indigo-500/30 text-indigo-300 text-[11px] leading-relaxed">
+            <span>🔑 Dành cho <strong>Quản Trị Viên Lớp</strong>. Nhập Mật khẩu Admin do <strong>Super Admin</strong> cấp cho lớp này.</span>
+          </div>
+
+          <div>
+            <label class="block text-slate-300 font-bold mb-1.5 flex items-center gap-1.5">
+              <span>🔑</span> <span>Mật Khẩu Admin Lớp (Super Admin cấp):</span>
+            </label>
+            <div class="relative">
+              <input type="password" id="auth-admin-pass-input" oninput="document.getElementById('auth-pass').value = this.value" placeholder="Nhập Mật khẩu Admin Lớp..." class="w-full bg-slate-900/90 border border-indigo-500/50 rounded-2xl p-3 pr-10 text-indigo-300 font-extrabold placeholder-slate-500 focus:outline-none focus:border-indigo-400 transition-all">
+              <button type="button" onclick="togglePasswordVisibility('auth-admin-pass-input', 'eye-admin')" class="absolute right-3 top-3 text-slate-400 hover:text-slate-100 text-sm">
+                <span id="eye-admin">👁️</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button onclick="handleWhitelistLogin()" class="w-full py-3.5 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-600 hover:brightness-110 text-slate-950 font-black text-sm rounded-2xl shadow-xl shadow-amber-500/25 transition-all transform active:scale-95">
+        VÀO GÓC LỚP NGAY 🚀
+      </button>
+
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div id="toast-notification" class="fixed bottom-16 sm:bottom-6 right-4 sm:right-6 z-50 bg-slate-900/95 text-amber-300 border border-amber-500/40 px-4 py-3 rounded-2xl text-xs font-bold shadow-2xl transition-all transform translate-y-20 opacity-0 flex items-center gap-2">
+    <!-- Populated by JS -->
+  </div>
+
+  <!-- App Main JavaScript -->
+  <script src="app.js"></script>
+</body>
+</html>
