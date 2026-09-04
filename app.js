@@ -9,7 +9,8 @@
       - Uploading photos on mobile phone or laptop takes under 0.5 seconds and never fails!
    4. REALTIME GLOBAL CLOUD REST VAULT (ff808181a067127101a06ca69d07110d):
       - Creating a class, adding student to roster, posting photos/videos, liking, commenting syncs across all devices globally in 2 seconds!
-   5. SUPER ADMIN PIN 999999 direct modal login in main gateway.
+   5. REALTIME LOGIN DROPDOWN & BRANDING AUTO-UPDATE:
+      - Changing class name or adding new classes immediately updates the Login Gateway Select Dropdown (#auth-class-select) across all connected devices!
    ========================================== */
 
 const SUPER_ADMIN_PIN = "999999";
@@ -200,6 +201,9 @@ class AppState {
     }
     localStorage.setItem(SYSTEM_CLASSES_KEY, JSON.stringify(this.classesIndex));
 
+    // Instantly update Login Gateway Select Dropdown & Titles
+    populateAuthClassSelect();
+
     if (broadcast && syncChannel) {
       syncChannel.postMessage({ type: 'DATA_UPDATED', classCode: this.systemClassName, timestamp: Date.now() });
     }
@@ -255,7 +259,6 @@ class AppState {
           if (Array.isArray(cloudData.classesIndex) && JSON.stringify(cloudData.classesIndex) !== JSON.stringify(this.classesIndex)) {
             this.classesIndex = cloudData.classesIndex;
             localStorage.setItem(SYSTEM_CLASSES_KEY, JSON.stringify(this.classesIndex));
-            populateAuthClassSelect();
             hasChanges = true;
           }
 
@@ -292,6 +295,14 @@ class AppState {
           }
 
           if (hasChanges) {
+            const idxClass = this.classesIndex.find(c => c.systemName === this.systemClassName);
+            if (idxClass) {
+              idxClass.webName = this.webDisplayName;
+              idxClass.year = this.academicYear;
+              idxClass.adminPass = this.classAdminPassword;
+              idxClass.studentPass = this.classStudentPassword;
+            }
+            localStorage.setItem(SYSTEM_CLASSES_KEY, JSON.stringify(this.classesIndex));
             localStorage.setItem(`web_lop_web_name_${this.systemClassName}`, this.webDisplayName);
             localStorage.setItem(`web_lop_year_${this.systemClassName}`, this.academicYear);
             localStorage.setItem(`web_lop_dynamic_pass_${this.systemClassName}`, this.classStudentPassword);
@@ -300,6 +311,7 @@ class AppState {
             localStorage.setItem(`web_lop_groups_${this.systemClassName}`, JSON.stringify(this.groups));
             localStorage.setItem(`web_lop_projects_${this.systemClassName}`, JSON.stringify(this.projects));
             
+            populateAuthClassSelect();
             await hydratePostMediaUrls();
             renderApp();
           }
@@ -450,11 +462,18 @@ function populateAuthClassSelect() {
       🏫 ${c.webName} (${c.systemName})
     </option>
   `).join('');
+
+  // Auto-Update Auth Title text
+  const authTitle = document.getElementById('auth-title');
+  if (authTitle && state.webDisplayName) {
+    authTitle.innerText = `CỔNG ĐĂNG NHẬP ${state.webDisplayName.toUpperCase()}`;
+  }
 }
 
 window.handleAuthClassChange = function(event) {
   const selectedCode = event.target.value;
   state.switchClass(selectedCode);
+  populateAuthClassSelect();
   renderApp();
 };
 
