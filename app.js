@@ -215,6 +215,28 @@ class AppState {
     this.pushToCloud();
   }
 
+  saveLocallyOnly() {
+    localStorage.setItem('web_lop_active_system_name', this.systemClassName);
+    localStorage.setItem(`web_lop_web_name_${this.systemClassName}`, this.webDisplayName);
+    localStorage.setItem(`web_lop_year_${this.systemClassName}`, this.academicYear);
+    localStorage.setItem(`web_lop_dynamic_pass_${this.systemClassName}`, this.classStudentPassword);
+    localStorage.setItem('web_lop_user', JSON.stringify(this.currentUser));
+    
+    localStorage.setItem(`web_lop_roster_${this.systemClassName}`, JSON.stringify(this.officialRoster));
+    localStorage.setItem(`web_lop_posts_${this.systemClassName}`, JSON.stringify(this.posts));
+    localStorage.setItem(`web_lop_groups_${this.systemClassName}`, JSON.stringify(this.groups));
+    localStorage.setItem(`web_lop_projects_${this.systemClassName}`, JSON.stringify(this.projects));
+
+    const idxClass = this.classesIndex.find(c => c.systemName === this.systemClassName);
+    if (idxClass) {
+      idxClass.webName = this.webDisplayName;
+      idxClass.year = this.academicYear;
+      idxClass.adminPass = this.classAdminPassword;
+      idxClass.studentPass = this.classStudentPassword;
+    }
+    localStorage.setItem(SYSTEM_CLASSES_KEY, JSON.stringify(this.classesIndex));
+  }
+
   async pushToCloud() {
     try {
       const payload = {
@@ -254,66 +276,47 @@ class AppState {
         const cloudRes = await res.json().catch(() => null);
         const cloudData = cloudRes ? cloudRes.data : null;
 
-        if (cloudData && cloudData.updatedAt && cloudData.updatedAt > this.lastCloudUpdatedAt) {
-          this.lastCloudUpdatedAt = cloudData.updatedAt;
+        if (cloudData) {
           let hasChanges = false;
 
-          // 1. Sync Global System Classes Index (Super Admin Class Creations)
-          if (Array.isArray(cloudData.classesIndex) && JSON.stringify(cloudData.classesIndex) !== JSON.stringify(this.classesIndex)) {
-            this.classesIndex = cloudData.classesIndex;
-            localStorage.setItem(SYSTEM_CLASSES_KEY, JSON.stringify(this.classesIndex));
+          // 1. Smart Merge Global System Classes Index
+          if (Array.isArray(cloudData.classesIndex)) {
+            const mergedClasses = mergeClassesIndex(this.classesIndex, cloudData.classesIndex);
+            if (JSON.stringify(mergedClasses) !== JSON.stringify(this.classesIndex)) {
+              this.classesIndex = mergedClasses;
+              hasChanges = true;
+            }
+          }
+
+          // 2. Smart Merge Active Class Roster & Posts
+          if (cloudData.webDisplayName && cloudData.webDisplayName !== this.webDisplayName) {
+            this.webDisplayName = cloudData.webDisplayName;
+            hasChanges = true;
+          }
+          if (cloudData.academicYear && cloudData.academicYear !== this.academicYear) {
+            this.academicYear = cloudData.academicYear;
             hasChanges = true;
           }
 
-          // 2. Sync Active Class Content, Official Roster & Posts
-          if (cloudData.systemClassName === this.systemClassName || !cloudData.systemClassName) {
-            if (cloudData.webDisplayName && cloudData.webDisplayName !== this.webDisplayName) {
-              this.webDisplayName = cloudData.webDisplayName;
+          if (Array.isArray(cloudData.officialRoster)) {
+            const mergedRoster = Array.from(new Set([...this.officialRoster, ...cloudData.officialRoster]));
+            if (JSON.stringify(mergedRoster) !== JSON.stringify(this.officialRoster)) {
+              this.officialRoster = mergedRoster;
               hasChanges = true;
             }
-            if (cloudData.academicYear && cloudData.academicYear !== this.academicYear) {
-              this.academicYear = cloudData.academicYear;
-              hasChanges = true;
-            }
-            if (cloudData.classStudentPassword && cloudData.classStudentPassword !== this.classStudentPassword) {
-              this.classStudentPassword = cloudData.classStudentPassword;
-              hasChanges = true;
-            }
-            if (cloudData.officialRoster && JSON.stringify(cloudData.officialRoster) !== JSON.stringify(this.officialRoster)) {
-              this.officialRoster = cloudData.officialRoster;
-              hasChanges = true;
-            }
-            if (cloudData.posts && JSON.stringify(cloudData.posts) !== JSON.stringify(this.posts)) {
-              this.posts = cloudData.posts;
-              hasChanges = true;
-            }
-            if (cloudData.groups && JSON.stringify(cloudData.groups) !== JSON.stringify(this.groups)) {
-              this.groups = cloudData.groups;
-              hasChanges = true;
-            }
-            if (cloudData.projects && JSON.stringify(cloudData.projects) !== JSON.stringify(this.projects)) {
-              this.projects = cloudData.projects;
+          }
+
+          // 3. SMART MERGE POSTS (PRESERVES ALL USER & FRIEND POSTS PERMANENTLY)
+          if (Array.isArray(cloudData.posts) && cloudData.posts.length > 0) {
+            const mergedPosts = mergePostsLists(this.posts, cloudData.posts);
+            if (JSON.stringify(mergedPosts) !== JSON.stringify(this.posts)) {
+              this.posts = mergedPosts;
               hasChanges = true;
             }
           }
 
           if (hasChanges) {
-            const idxClass = this.classesIndex.find(c => c.systemName === this.systemClassName);
-            if (idxClass) {
-              idxClass.webName = this.webDisplayName;
-              idxClass.year = this.academicYear;
-              idxClass.adminPass = this.classAdminPassword;
-              idxClass.studentPass = this.classStudentPassword;
-            }
-            localStorage.setItem(SYSTEM_CLASSES_KEY, JSON.stringify(this.classesIndex));
-            localStorage.setItem(`web_lop_web_name_${this.systemClassName}`, this.webDisplayName);
-            localStorage.setItem(`web_lop_year_${this.systemClassName}`, this.academicYear);
-            localStorage.setItem(`web_lop_dynamic_pass_${this.systemClassName}`, this.classStudentPassword);
-            localStorage.setItem(`web_lop_roster_${this.systemClassName}`, JSON.stringify(this.officialRoster));
-            localStorage.setItem(`web_lop_posts_${this.systemClassName}`, JSON.stringify(this.posts));
-            localStorage.setItem(`web_lop_groups_${this.systemClassName}`, JSON.stringify(this.groups));
-            localStorage.setItem(`web_lop_projects_${this.systemClassName}`, JSON.stringify(this.projects));
-            
+            this.saveLocallyOnly();
             populateAuthClassSelect();
             await hydratePostMediaUrls();
             renderApp();
@@ -512,59 +515,113 @@ function broadcastPeerState(payload) {
   }
 }
 
+function mergeClassesIndex(existingClasses, incomingClasses) {
+  const ex = Array.isArray(existingClasses) ? existingClasses : [];
+  const inc = Array.isArray(incomingClasses) ? incomingClasses : [];
+  if (inc.length === 0) return ex;
+  if (ex.length === 0) return inc;
+
+  const classMap = new Map();
+  for (let c of ex) {
+    if (c && (c.id || c.systemName)) {
+      classMap.set(c.systemName || c.id, c);
+    }
+  }
+  for (let c of inc) {
+    if (c && (c.id || c.systemName)) {
+      const key = c.systemName || c.id;
+      if (!classMap.has(key)) {
+        classMap.set(key, c);
+      } else {
+        classMap.set(key, { ...classMap.get(key), ...c });
+      }
+    }
+  }
+  return Array.from(classMap.values());
+}
+
+function mergePostsLists(existingPosts, incomingPosts) {
+  const ex = Array.isArray(existingPosts) ? existingPosts : [];
+  const inc = Array.isArray(incomingPosts) ? incomingPosts : [];
+  if (inc.length === 0) return ex;
+  if (ex.length === 0) return inc;
+
+  const postMap = new Map();
+
+  for (let p of ex) {
+    if (p && p.id) postMap.set(p.id, p);
+  }
+
+  for (let p of inc) {
+    if (p && p.id) {
+      if (!postMap.has(p.id)) {
+        postMap.set(p.id, p);
+      } else {
+        const localP = postMap.get(p.id);
+        const mergedP = { ...localP, ...p };
+
+        const lUsers = new Set([...(localP.likedByUsers || []), ...(p.likedByUsers || [])]);
+        mergedP.likedByUsers = Array.from(lUsers);
+
+        const commentMap = new Map();
+        for (let c of (localP.comments || [])) {
+          const key = c.id || (c.user + '_' + c.text + '_' + c.date);
+          commentMap.set(key, c);
+        }
+        for (let c of (p.comments || [])) {
+          const key = c.id || (c.user + '_' + c.text + '_' + c.date);
+          if (!commentMap.has(key)) commentMap.set(key, c);
+        }
+        mergedP.comments = Array.from(commentMap.values());
+
+        postMap.set(p.id, mergedP);
+      }
+    }
+  }
+
+  const result = Array.from(postMap.values());
+  result.sort((a, b) => new Date((b.date || '').replace(' ', 'T')) - new Date((a.date || '').replace(' ', 'T')));
+  return result;
+}
+
 async function applyRemoteState(remoteData) {
-  if (!remoteData || !remoteData.updatedAt || remoteData.updatedAt <= state.lastCloudUpdatedAt) return;
-  state.lastCloudUpdatedAt = remoteData.updatedAt;
+  if (!remoteData) return;
 
   let hasChanges = false;
 
-  if (Array.isArray(remoteData.classesIndex) && JSON.stringify(remoteData.classesIndex) !== JSON.stringify(state.classesIndex)) {
-    state.classesIndex = remoteData.classesIndex;
-    localStorage.setItem(SYSTEM_CLASSES_KEY, JSON.stringify(state.classesIndex));
-    hasChanges = true;
+  if (Array.isArray(remoteData.classesIndex)) {
+    const mergedClasses = mergeClassesIndex(state.classesIndex, remoteData.classesIndex);
+    if (JSON.stringify(mergedClasses) !== JSON.stringify(state.classesIndex)) {
+      state.classesIndex = mergedClasses;
+      hasChanges = true;
+    }
   }
 
-  if (remoteData.systemClassName === state.systemClassName || !remoteData.systemClassName) {
-    if (remoteData.webDisplayName && remoteData.webDisplayName !== state.webDisplayName) {
-      state.webDisplayName = remoteData.webDisplayName;
+  if (remoteData.webDisplayName && remoteData.webDisplayName !== state.webDisplayName) {
+    state.webDisplayName = remoteData.webDisplayName;
+    hasChanges = true;
+  }
+  if (remoteData.academicYear && remoteData.academicYear !== state.academicYear) {
+    state.academicYear = remoteData.academicYear;
+    hasChanges = true;
+  }
+  if (Array.isArray(remoteData.officialRoster)) {
+    const mergedRoster = Array.from(new Set([...state.officialRoster, ...remoteData.officialRoster]));
+    if (JSON.stringify(mergedRoster) !== JSON.stringify(state.officialRoster)) {
+      state.officialRoster = mergedRoster;
       hasChanges = true;
     }
-    if (remoteData.academicYear && remoteData.academicYear !== state.academicYear) {
-      state.academicYear = remoteData.academicYear;
-      hasChanges = true;
-    }
-    if (remoteData.officialRoster && JSON.stringify(remoteData.officialRoster) !== JSON.stringify(state.officialRoster)) {
-      state.officialRoster = remoteData.officialRoster;
-      hasChanges = true;
-    }
-    if (remoteData.posts && JSON.stringify(remoteData.posts) !== JSON.stringify(state.posts)) {
-      state.posts = remoteData.posts;
-      hasChanges = true;
-    }
-    if (remoteData.groups && JSON.stringify(remoteData.groups) !== JSON.stringify(state.groups)) {
-      state.groups = remoteData.groups;
-      hasChanges = true;
-    }
-    if (remoteData.projects && JSON.stringify(remoteData.projects) !== JSON.stringify(state.projects)) {
-      state.projects = remoteData.projects;
+  }
+  if (Array.isArray(remoteData.posts) && remoteData.posts.length > 0) {
+    const mergedPosts = mergePostsLists(state.posts, remoteData.posts);
+    if (JSON.stringify(mergedPosts) !== JSON.stringify(state.posts)) {
+      state.posts = mergedPosts;
       hasChanges = true;
     }
   }
 
   if (hasChanges) {
-    const idxClass = state.classesIndex.find(c => c.systemName === state.systemClassName);
-    if (idxClass) {
-      idxClass.webName = state.webDisplayName;
-      idxClass.year = state.academicYear;
-    }
-    localStorage.setItem(SYSTEM_CLASSES_KEY, JSON.stringify(state.classesIndex));
-    localStorage.setItem(`web_lop_web_name_${state.systemClassName}`, state.webDisplayName);
-    localStorage.setItem(`web_lop_year_${state.systemClassName}`, state.academicYear);
-    localStorage.setItem(`web_lop_roster_${state.systemClassName}`, JSON.stringify(state.officialRoster));
-    localStorage.setItem(`web_lop_posts_${state.systemClassName}`, JSON.stringify(state.posts));
-    localStorage.setItem(`web_lop_groups_${state.systemClassName}`, JSON.stringify(state.groups));
-    localStorage.setItem(`web_lop_projects_${state.systemClassName}`, JSON.stringify(state.projects));
-
+    state.saveLocallyOnly();
     populateAuthClassSelect();
     await hydratePostMediaUrls();
     renderApp();
@@ -2645,4 +2702,12 @@ window.openCreateProjectModal = function() {
   state.save(true);
   renderProjectsVault();
   showToast(`🎉 Đã tạo dự án mới: ${name}`);
+};
+
+window.forcePurgeAndReload = function() {
+  if (confirm("🧹 Bạn có chắc muốn làm sạch toàn bộ dữ liệu tạm cũ trên thiết bị này để đồng bộ lại dữ liệu mới từ hệ thống không?")) {
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.reload(true);
+  }
 };
