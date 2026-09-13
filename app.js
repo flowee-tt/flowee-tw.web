@@ -371,8 +371,8 @@ class AppState {
 
 const state = new AppState();
 
-// Client-Side Image Compression (Max Width 1200px, 82% Quality)
-async function compressImageToDataUrl(file, maxWidth = 1200, maxHeight = 1200, quality = 0.82) {
+// Client-Side HD Image Compression (Max Width 800px, 70% Quality for Ultra-Fast Cloud Payload Sync)
+async function compressImageToDataUrl(file, maxWidth = 800, maxHeight = 800, quality = 0.70) {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -1726,8 +1726,8 @@ window.handleFileSelect = async function(event) {
         reader.readAsDataURL(file);
       });
     } else {
-      // Compress Image to HD Data URL under 0.5s
-      dataUrl = await compressImageToDataUrl(file, 1200, 1200, 0.82);
+      // Compress Image to HD Data URL (sub-50KB for instant global cloud sync)
+      dataUrl = await compressImageToDataUrl(file, 800, 800, 0.70);
     }
 
     await mediaStore.saveBlob(mediaId, file, file.name, isVid ? 'VIDEO' : 'IMAGE');
@@ -2163,9 +2163,15 @@ window.adminSaveStudentPass = function() {
   }
 
   state.classStudentPassword = pass;
+  const idxClass = state.classesIndex.find(c => c.systemName === state.systemClassName);
+  if (idxClass) {
+    idxClass.studentPass = pass;
+  }
+
   state.save(true);
+  populateAuthClassSelect();
   renderAdminModalContent();
-  showToast(`🔒 Đã cập nhật Mật Khẩu Cấp Cho Học Sinh thành: ${pass}`);
+  showToast(`🔒 Đã cập nhật Mật Khẩu Cấp Cho Học Sinh thành: ${pass} & đồng bộ tới trang đăng nhập!`);
 };
 
 window.adminExportZipBackup = function() {
@@ -2274,14 +2280,35 @@ window.adminSaveClassSettings = function() {
     return;
   }
 
+  const oldSysName = state.systemClassName;
   state.systemClassName = sysInput;
   state.webDisplayName = webInput;
   state.academicYear = yearInput || "Niên khóa 2023 - 2026";
-  state.save(true);
 
+  let idxClass = state.classesIndex.find(c => c.systemName === oldSysName || c.systemName === sysInput);
+  if (idxClass) {
+    idxClass.systemName = sysInput;
+    idxClass.webName = webInput;
+    idxClass.year = state.academicYear;
+  } else {
+    state.classesIndex.push({
+      id: 'c_' + Date.now(),
+      systemName: sysInput,
+      webName: webInput,
+      year: state.academicYear,
+      adminName: 'Quản Trị Viên',
+      adminPass: state.classAdminPassword,
+      studentPass: state.classStudentPassword,
+      gbQuota: 5.0,
+      status: 'Active'
+    });
+  }
+
+  state.save(true);
+  populateAuthClassSelect();
   renderApp();
   renderAdminModalContent();
-  showToast(`🎉 Đã cập nhật Web: "${state.webDisplayName}" (Mã: ${state.systemClassName})`);
+  showToast(`🎉 Đã cập nhật Web: "${state.webDisplayName}" (Mã: ${state.systemClassName}) & đồng bộ tức thì!`);
 };
 
 window.adminClearAllData = function() {
