@@ -173,6 +173,7 @@ class AppState {
     this.posts = JSON.parse(localStorage.getItem(`web_lop_posts_${systemName}`)) || [];
     this.groups = JSON.parse(localStorage.getItem(`web_lop_groups_${systemName}`)) || [];
     this.projects = JSON.parse(localStorage.getItem(`web_lop_projects_${systemName}`)) || [];
+    this.deletedPostIds = JSON.parse(localStorage.getItem(`web_lop_deleted_posts_${systemName}`)) || [];
 
     localStorage.setItem('web_lop_active_system_name', systemName);
   }
@@ -204,6 +205,7 @@ class AppState {
     localStorage.setItem(`web_lop_posts_${this.systemClassName}`, JSON.stringify(this.posts));
     localStorage.setItem(`web_lop_groups_${this.systemClassName}`, JSON.stringify(this.groups));
     localStorage.setItem(`web_lop_projects_${this.systemClassName}`, JSON.stringify(this.projects));
+    localStorage.setItem(`web_lop_deleted_posts_${this.systemClassName}`, JSON.stringify(this.deletedPostIds || []));
 
     const idxClass = this.classesIndex.find(c => c.systemName === this.systemClassName);
     if (idxClass) {
@@ -240,6 +242,7 @@ class AppState {
     localStorage.setItem(`web_lop_posts_${this.systemClassName}`, JSON.stringify(this.posts));
     localStorage.setItem(`web_lop_groups_${this.systemClassName}`, JSON.stringify(this.groups));
     localStorage.setItem(`web_lop_projects_${this.systemClassName}`, JSON.stringify(this.projects));
+    localStorage.setItem(`web_lop_deleted_posts_${this.systemClassName}`, JSON.stringify(this.deletedPostIds || []));
 
     const idxClass = this.classesIndex.find(c => c.systemName === this.systemClassName);
     if (idxClass) {
@@ -270,6 +273,7 @@ class AppState {
           officialRoster: this.officialRoster,
           usersProfiles: this.usersProfiles,
           posts: this.posts,
+          deletedPostIds: this.deletedPostIds || [],
           groups: this.groups,
           projects: this.projects,
           updatedAt: Date.now()
@@ -300,16 +304,15 @@ class AppState {
           this.hasCloudBeenFetched = true;
           let hasChanges = false;
 
-          // 1. Smart Merge Global System Classes Index
-          if (Array.isArray(cloudData.classesIndex)) {
-            const mergedClasses = mergeClassesIndex(this.classesIndex, cloudData.classesIndex);
-            if (JSON.stringify(mergedClasses) !== JSON.stringify(this.classesIndex)) {
-              this.classesIndex = mergedClasses;
+          // 1. Direct Sync Global System Classes Index (Cloud Master Source)
+          if (Array.isArray(cloudData.classesIndex) && cloudData.classesIndex.length > 0) {
+            if (JSON.stringify(cloudData.classesIndex) !== JSON.stringify(this.classesIndex)) {
+              this.classesIndex = cloudData.classesIndex;
               hasChanges = true;
             }
           }
 
-          // 2. Smart Merge Active Class Roster, Profiles & Posts
+          // 2. Smart Merge Active Class Roster, Passwords & Profiles
           if (cloudData.webDisplayName && cloudData.webDisplayName !== this.webDisplayName) {
             this.webDisplayName = cloudData.webDisplayName;
             hasChanges = true;
@@ -318,10 +321,26 @@ class AppState {
             this.academicYear = cloudData.academicYear;
             hasChanges = true;
           }
+          if (cloudData.classStudentPassword && cloudData.classStudentPassword !== this.classStudentPassword) {
+            this.classStudentPassword = cloudData.classStudentPassword;
+            hasChanges = true;
+          }
+          if (cloudData.classAdminPassword && cloudData.classAdminPassword !== this.classAdminPassword) {
+            this.classAdminPassword = cloudData.classAdminPassword;
+            hasChanges = true;
+          }
 
           if (Array.isArray(cloudData.officialRoster) && JSON.stringify(cloudData.officialRoster) !== JSON.stringify(this.officialRoster)) {
             this.officialRoster = cloudData.officialRoster;
             hasChanges = true;
+          }
+
+          if (Array.isArray(cloudData.deletedPostIds)) {
+            const mergedDeleted = Array.from(new Set([...(this.deletedPostIds || []), ...cloudData.deletedPostIds]));
+            if (JSON.stringify(mergedDeleted) !== JSON.stringify(this.deletedPostIds)) {
+              this.deletedPostIds = mergedDeleted;
+              hasChanges = true;
+            }
           }
 
           if (cloudData.usersProfiles) {
@@ -334,12 +353,19 @@ class AppState {
             hasChanges = true;
           }
 
-          // 3. SMART MERGE POSTS (PRESERVES ALL USER & FRIEND POSTS PERMANENTLY)
-          if (Array.isArray(cloudData.posts) && cloudData.posts.length > 0) {
-            const mergedPosts = mergePostsLists(this.posts, cloudData.posts);
-            if (JSON.stringify(mergedPosts) !== JSON.stringify(this.posts)) {
-              this.posts = mergedPosts;
-              hasChanges = true;
+          // 3. SMART MERGE POSTS (PRESERVES ALL USER & FRIEND POSTS PERMANENTLY, ALLOWS RESET)
+          if (Array.isArray(cloudData.posts)) {
+            if (cloudData.posts.length === 0) {
+              if (this.posts.length !== 0) {
+                this.posts = [];
+                hasChanges = true;
+              }
+            } else {
+              const mergedPosts = mergePostsLists(this.posts, cloudData.posts, this.deletedPostIds);
+              if (JSON.stringify(mergedPosts) !== JSON.stringify(this.posts)) {
+                this.posts = mergedPosts;
+                hasChanges = true;
+              }
             }
           }
 
@@ -569,20 +595,21 @@ function mergeClassesIndex(existingClasses, incomingClasses) {
   return Array.from(classMap.values());
 }
 
-function mergePostsLists(existingPosts, incomingPosts) {
+function mergePostsLists(existingPosts, incomingPosts, deletedIds = []) {
   const ex = Array.isArray(existingPosts) ? existingPosts : [];
   const inc = Array.isArray(incomingPosts) ? incomingPosts : [];
-  if (inc.length === 0) return ex;
-  if (ex.length === 0) return inc;
+  const deletedSet = new Set(deletedIds || []);
+
+  if (inc.length === 0 && ex.length === 0) return [];
 
   const postMap = new Map();
 
   for (let p of ex) {
-    if (p && p.id) postMap.set(p.id, p);
+    if (p && p.id && !deletedSet.has(p.id)) postMap.set(p.id, p);
   }
 
   for (let p of inc) {
-    if (p && p.id) {
+    if (p && p.id && !deletedSet.has(p.id)) {
       if (!postMap.has(p.id)) {
         postMap.set(p.id, p);
       } else {
@@ -608,7 +635,7 @@ function mergePostsLists(existingPosts, incomingPosts) {
     }
   }
 
-  const result = Array.from(postMap.values());
+  const result = Array.from(postMap.values()).filter(p => !deletedSet.has(p.id));
   result.sort((a, b) => new Date((b.date || '').replace(' ', 'T')) - new Date((a.date || '').replace(' ', 'T')));
   return result;
 }
@@ -618,10 +645,9 @@ async function applyRemoteState(remoteData) {
 
   let hasChanges = false;
 
-  if (Array.isArray(remoteData.classesIndex)) {
-    const mergedClasses = mergeClassesIndex(state.classesIndex, remoteData.classesIndex);
-    if (JSON.stringify(mergedClasses) !== JSON.stringify(state.classesIndex)) {
-      state.classesIndex = mergedClasses;
+  if (Array.isArray(remoteData.classesIndex) && remoteData.classesIndex.length > 0) {
+    if (JSON.stringify(remoteData.classesIndex) !== JSON.stringify(state.classesIndex)) {
+      state.classesIndex = remoteData.classesIndex;
       hasChanges = true;
     }
   }
@@ -634,18 +660,42 @@ async function applyRemoteState(remoteData) {
     state.academicYear = remoteData.academicYear;
     hasChanges = true;
   }
+  if (remoteData.classStudentPassword && remoteData.classStudentPassword !== state.classStudentPassword) {
+    state.classStudentPassword = remoteData.classStudentPassword;
+    hasChanges = true;
+  }
+  if (remoteData.classAdminPassword && remoteData.classAdminPassword !== state.classAdminPassword) {
+    state.classAdminPassword = remoteData.classAdminPassword;
+    hasChanges = true;
+  }
+
   if (Array.isArray(remoteData.officialRoster)) {
-    const mergedRoster = Array.from(new Set([...state.officialRoster, ...remoteData.officialRoster]));
-    if (JSON.stringify(mergedRoster) !== JSON.stringify(state.officialRoster)) {
-      state.officialRoster = mergedRoster;
+    if (JSON.stringify(remoteData.officialRoster) !== JSON.stringify(state.officialRoster)) {
+      state.officialRoster = remoteData.officialRoster;
       hasChanges = true;
     }
   }
-  if (Array.isArray(remoteData.posts) && remoteData.posts.length > 0) {
-    const mergedPosts = mergePostsLists(state.posts, remoteData.posts);
-    if (JSON.stringify(mergedPosts) !== JSON.stringify(state.posts)) {
-      state.posts = mergedPosts;
+
+  if (Array.isArray(remoteData.deletedPostIds)) {
+    const mergedDeleted = Array.from(new Set([...(state.deletedPostIds || []), ...remoteData.deletedPostIds]));
+    if (JSON.stringify(mergedDeleted) !== JSON.stringify(state.deletedPostIds)) {
+      state.deletedPostIds = mergedDeleted;
       hasChanges = true;
+    }
+  }
+
+  if (Array.isArray(remoteData.posts)) {
+    if (remoteData.posts.length === 0) {
+      if (state.posts.length !== 0) {
+        state.posts = [];
+        hasChanges = true;
+      }
+    } else {
+      const mergedPosts = mergePostsLists(state.posts, remoteData.posts, state.deletedPostIds);
+      if (JSON.stringify(mergedPosts) !== JSON.stringify(state.posts)) {
+        state.posts = mergedPosts;
+        hasChanges = true;
+      }
     }
   }
 
@@ -2025,8 +2075,12 @@ window.submitComment = function(postId) {
 
 window.deletePost = function(postId) {
   if (!confirm("🗑️ Bạn có chắc chắn muốn XÓA BÀI VIẾT NÀY không?")) return;
+  state.deletedPostIds = state.deletedPostIds || [];
+  if (!state.deletedPostIds.includes(postId)) {
+    state.deletedPostIds.push(postId);
+  }
   state.posts = state.posts.filter(p => p.id !== postId);
-  state.save(true);
+  state.save(true, true);
   renderApp();
   showToast("🗑️ Đã xóa bài viết thành công!");
 };
@@ -2287,14 +2341,14 @@ window.adminAddRosterName = function() {
   }
 
   state.officialRoster.push(name);
-  state.save(true);
+  state.save(true, true);
   renderAdminModalContent();
   showToast(`✅ Đã thêm "${name}" vào Danh Sách Học Sinh!`);
 };
 
 window.adminRemoveRosterName = function(name) {
   state.officialRoster = state.officialRoster.filter(n => n !== name);
-  state.save(true);
+  state.save(true, true);
   renderAdminModalContent();
   showToast(`🗑️ Đã xóa "${name}" khỏi Danh Sách.`);
 };
@@ -2333,7 +2387,7 @@ window.adminSaveClassSettings = function() {
     });
   }
 
-  state.save(true);
+  state.save(true, true);
   populateAuthClassSelect();
   renderApp();
   renderAdminModalContent();
@@ -2346,7 +2400,8 @@ window.adminClearAllData = function() {
   state.posts = [];
   state.groups = [];
   state.projects = [];
-  state.save(true);
+  state.deletedPostIds = [];
+  state.save(true, true);
 
   renderApp();
   closeAdminModal();
@@ -2525,7 +2580,7 @@ window.superAdminCreateClass = function() {
   };
 
   state.classesIndex.push(newClassObj);
-  state.save(true);
+  state.save(true, true);
 
   populateAuthClassSelect();
   renderSuperAdminModalContent();
@@ -2545,6 +2600,11 @@ window.superAdminEnterClass = async function(classId) {
 };
 
 window.superAdminDeleteClass = function(classId) {
+  if (state.classesIndex.length <= 1) {
+    showToast("⚠️ Hệ thống phải giữ lại ít nhất 1 lớp học!");
+    return;
+  }
+
   if (!confirm("💥 [SUPER ADMIN CẢNH BÁO] Bạn có chắc muốn XÓA VĨNH VIỄN lớp này khỏi hệ thống không?")) return;
 
   const target = state.classesIndex.find(c => c.id === classId);
@@ -2556,10 +2616,19 @@ window.superAdminDeleteClass = function(classId) {
   }
 
   state.classesIndex = state.classesIndex.filter(c => c.id !== classId);
-  state.save(true);
+
+  if (target && target.systemName === state.systemClassName) {
+    const nextClass = state.classesIndex[0];
+    if (nextClass) {
+      state.loadClassData(nextClass.systemName);
+    }
+  }
+
+  state.save(true, true);
 
   populateAuthClassSelect();
   renderSuperAdminModalContent();
+  renderApp();
   showToast("🗑️ Đã xóa lớp và dữ liệu khỏi hệ thống!");
 };
 
